@@ -21,7 +21,7 @@ genai.configure(api_key=gemini_api_key)
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # --- CONSTANTE PARA LIMITE DE COMENTÁRIOS ---
-MAX_COMMENTS_TO_PROCESS = 100 # Limite de 100 comentários
+MAX_COMMENTS_TO_PROCESS = 1000 # Limite de 1000 comentários
 
 # --- EXTRAÇÃO DE DADOS ---
 @st.cache_data(show_spinner=False)
