@@ -109,11 +109,55 @@ def generate_qualitative_analysis(_analysis_results, _text_sample):
     try: response = model.generate_content(prompt); return response.text.strip()
     except Exception as e: return f"Erro: {e}"
 
+# --- PROMPT ATUALIZADO COM EXEMPLO PARA A PERSONA SINTÉTICA ---
 @st.cache_data
 def generate_persona_insights(_analysis_results, _text_sample):
-    prompt = f"""Aja como um Estrategista de Marketing e Produto. Baseado nos dados, crie um perfil detalhado de uma "persona sintética". Estruture em Markdown: 1. Nome da Persona (sugestivo). 2. Perfil Resumido (2-3 frases). 3. Dores e Necessidades Principais (bullet points). 4. Desejos e Motivações (bullet points). 5. Tom de Voz e Comportamento. 6. Oportunidades de Engajamento (2-3 ações concretas). Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
-    try: response = model.generate_content(prompt); return response.text.strip()
-    except Exception as e: return f"Erro ao gerar insights de persona: {e}"
+    prompt = f"""
+    Aja como um Estrategista de Marketing e Produto de classe mundial, especialista em destilar dados brutos em perfis de persona acionáveis.
+
+    Sua tarefa é criar um perfil de persona sintética extremamente detalhado e estratégico, com base nos dados de social listening fornecidos.
+
+    **Dados da Análise:**
+    {json.dumps(_analysis_results, ensure_ascii=False)}
+
+    ---
+
+    **EXEMPLO DE ESTRUTURA E QUALIDADE PERFEITA:**
+
+    **Persona Identificada:** O Investidor Global Consciente
+
+    **1. Perfil Resumido:**
+    O Investidor Global Consciente é um profissional ou pessoa com renda disponível que busca diversificar seus investimentos internacionalmente, priorizando a otimização de custos e a transparência. Ele é pragmático e busca informações detalhadas antes de tomar decisões, demonstrando preocupação com impostos e regulamentações.
+
+    **2. Dores e Necessidades Principais:**
+    * Taxas e Custos elevados: A principal preocupação é com taxas de corretagem, IOF, e spread, buscando soluções mais econômicas.
+    * Complexidade da Declaração de Imposto de Renda sobre investimentos no exterior: Falta clareza e facilidade no processo de declaração de ganhos de capital e dividendos obtidos no exterior.
+    * Falta de transparência e suporte adequado de algumas corretoras: Experiências negativas com o suporte ao cliente e dificuldades em resolver problemas com corretoras geram desconfiança.
+
+    **3. Desejos e Motivações:**
+    * Investimentos no exterior com baixo custo: Busca plataformas e estratégias para investir internacionalmente com as menores taxas e custos possíveis.
+    * Acesso a informações claras e precisas: Necessita de informações detalhadas e transparentes sobre investimentos, impostos e regulamentações.
+    * Diversificação de portfólio com ETFs: Interesse em ETFs como IVV e IVVB11 para diversificação internacional.
+
+    **4. Tom de Voz e Comportamento:**
+    O Investidor Global Consciente se comunica de forma pragmática e direta, valorizando informações objetivas e dados quantitativos. Ele é cético em relação a promessas exageradas e busca comprovação de resultados. Realiza pesquisas detalhadas antes de tomar decisões, comparando diversas opções e lendo avaliações de outros usuários.
+
+    **5. Oportunidades de Engajamento:**
+    * Desenvolver um guia completo e atualizado sobre a declaração de imposto de renda para investimentos no exterior, com checklists e exemplos práticos.
+    * Lançar uma calculadora online que simule os custos de investimento em diferentes plataformas, incluindo taxas, IOF e spread.
+    * Criar webinars e workshops gratuitos com especialistas em investimentos internacionais e planejamento tributário.
+
+    ---
+
+    **Sua Tarefa Agora:**
+    Com base nos dados da análise fornecidos no início deste prompt, gere um novo perfil de persona, seguindo **EXATAMENTE** a mesma estrutura, formato e nível de profundidade do exemplo acima.
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        return f"Erro ao gerar insights de persona: {e}"
+
 
 @st.cache_data
 def generate_ice_score_tests(_analysis_results):
@@ -121,11 +165,10 @@ def generate_ice_score_tests(_analysis_results):
     try: response = model.generate_content(prompt); return json.loads(clean_json_response(response.text))
     except Exception as e: st.error(f"Erro ao gerar testes ICE: {e}"); return None
 
-# --- PROMPT REFORMULADO PARA PMM: MENOS É MAIS ---
 @st.cache_data
 def generate_product_marketing_insights(_analysis_results):
     prompt = f"""
-    Aja como um Consultor de Estratégia de Produto e Marketing de alto nível. Sua tarefa é destilar os dados de social listening em um briefing executivo, conciso e extremamente acionável. A filosofia é 'menos é mais'. Evite repetições de outras seções e foque nas conclusões estratégicas.
+    Aja como um Consultor de Estratégia de Produto e Marketing de alto nível. Sua tarefa é destilar os dados de social listening em um briefing executivo, conciso e extremamente acionável. A filosofia é 'menos é mais', mas com profundidade. Evite repetições de outras seções e foque nas conclusões estratégicas.
 
     **Dados da Análise:**
     {json.dumps(_analysis_results, ensure_ascii=False)}
@@ -135,26 +178,21 @@ def generate_product_marketing_insights(_analysis_results):
     ### Briefing Estratégico para Produto e Marketing
 
     **1. Diagnóstico Central:**
-    * Em um único parágrafo, qual é a principal tensão ou oportunidade revelada pelos dados? Qual é o 'resumo da ópera' da percepção do público sobre este assunto/produto?
+    * **Análise Profunda (2 parágrafos):** Considerando a análise de um grande volume de comentários, vá além da superfície. Sintetize os dados para revelar a história central.
+        * **Qual é a principal força positiva?** Descreva o principal desejo ou motivação que atrai o público a este tópico/produto.
+        * **Qual é a principal barreira ou fonte de atrito?** Descreva a maior dor, medo ou frustração que o público enfrenta.
+        * **Qual a tensão estratégica resultante?** Explique o conflito central que surge do choque entre o desejo e a barreira. Esta tensão é a oportunidade de negócio mais importante a ser resolvida.
 
     **2. Diretrizes Estratégicas para MARKETING:**
     * Com base no diagnóstico, liste de 2 a 3 recomendações de alto impacto para a equipe de marketing. Seja prescritivo.
-      * **Exemplo:** "Focar a mensagem principal no benefício X, que é o ponto positivo mais ressonante."
-      * **Exemplo:** "Criar uma campanha de conteúdo para desmistificar a objeção Y, o principal ponto de atrito."
 
     **3. Diretrizes Estratégicas para PRODUTO:**
     * Com base no diagnóstico, liste de 2 a 3 recomendações de alto impacto para a equipe de produto. Seja prescritivo.
-      * **Exemplo:** "Priorizar a correção do problema X no próximo sprint, pois é a maior fonte de sentimento negativo."
-      * **Exemplo:** "Investigar a viabilidade da funcionalidade Y, o desejo mais recorrente do público."
 
     O objetivo é criar um documento que um C-level ou líder de equipe possa ler em 60 segundos e entender exatamente onde focar os esforços.
     """
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        return f"Erro ao gerar insights de PMM: {e}"
-
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception as e: return f"Erro ao gerar insights de PMM: {e}"
 
 # --- FUNÇÕES DE VISUALIZAÇÃO ---
 def plot_sentiment_chart(sentiment_data):
