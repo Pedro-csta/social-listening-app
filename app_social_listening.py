@@ -25,28 +25,23 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 # --- CONSTANTE PARA LIMITE DE COMENTÁRIOS ---
 MAX_COMMENTS_TO_PROCESS = 1000
 
-# --- FUNÇÕES DE EXTRAÇÃO DE DADOS (Sem alterações) ---
+# --- FUNÇÕES DE EXTRAÇÃO DE DADOS ---
 @st.cache_data(show_spinner="Extraindo texto do arquivo...")
 def extract_text_from_file(file_contents, file_extension):
     text_content_list = []
     try:
         if file_extension == '.csv':
             df = pd.read_csv(io.StringIO(file_contents.decode('utf-8')))
-            if 'comentario' in df.columns:
-                text_content_list = df['comentario'].dropna().astype(str).tolist()
-            else:
-                text_content_list = [" ".join(row.dropna().astype(str)) for _, row in df.iterrows()]
+            if 'comentario' in df.columns: text_content_list = df['comentario'].dropna().astype(str).tolist()
+            else: text_content_list = [" ".join(row.dropna().astype(str)) for _, row in df.iterrows()]
         elif file_extension in ['.xls', '.xlsx']:
             df = pd.read_excel(io.BytesIO(file_contents))
-            if 'comentario' in df.columns:
-                text_content_list = df['comentario'].dropna().astype(str).tolist()
-            else:
-                text_content_list = [" ".join(row.dropna().astype(str)) for _, row in df.iterrows()]
+            if 'comentario' in df.columns: text_content_list = df['comentario'].dropna().astype(str).tolist()
+            else: text_content_list = [" ".join(row.dropna().astype(str)) for _, row in df.iterrows()]
         elif file_extension in ['.doc', '.docx']:
             document = Document(io.BytesIO(file_contents))
             text_content_list = [p.text for p in document.paragraphs if p.text.strip()]
-    except Exception as e:
-        st.error(f"Erro ao extrair texto do arquivo: {e}")
+    except Exception as e: st.error(f"Erro ao extrair texto do arquivo: {e}")
     return text_content_list
 
 @st.cache_data(show_spinner=False)
@@ -55,31 +50,22 @@ def download_youtube_comments(youtube_url):
     try:
         downloader = YoutubeCommentDownloader()
         match = re.search(r'(?:v=|/)([0-9A-Za-z_-]{11}).*', youtube_url)
-        if not match:
-            st.error(f"URL do YouTube inválida: {youtube_url}.")
-            return []
+        if not match: st.error(f"URL do YouTube inválida: {youtube_url}."); return []
         video_id = match.group(1)
         with st.spinner(f"Baixando comentários de: {youtube_url}..."):
             comments_generator = downloader.get_comments(video_id)
             for comment in comments_generator:
-                if comment and 'text' in comment:
-                    all_comments.append(comment['text'])
-                if len(all_comments) >= 2500:
-                    break
-    except Exception as e:
-        st.error(f"Não foi possível baixar comentários de '{youtube_url}': {e}")
+                if comment and 'text' in comment: all_comments.append(comment['text'])
+                if len(all_comments) >= 2500: break
+    except Exception as e: st.error(f"Não foi possível baixar comentários de '{youtube_url}': {e}")
     return all_comments
 
 # --- FUNÇÕES DE ANÁLISE COM GEMINI ---
 def clean_json_response(text):
-    # Tenta encontrar um bloco de código JSON
     match = re.search(r'```json\s*(\{[\s\S]*?\})\s*```', text, re.DOTALL)
-    if match:
-        return match.group(1)
-    # Se não encontrar, procura por um JSON que ocupe toda a string
+    if match: return match.group(1)
     match = re.search(r'^\s*\{[\s\S]*?\}\s*$', text, re.DOTALL)
-    if match:
-        return match.group(0)
+    if match: return match.group(0)
     return text
 
 @st.cache_data(show_spinner="Analisando texto com a IA...")
@@ -90,133 +76,88 @@ def analyze_text_with_gemini(_text_to_analyze):
         response = model.generate_content(prompt)
         data = json.loads(clean_json_response(response.text))
         return data
-    except Exception as e:
-        st.error(f"Erro na análise principal da IA: {e}")
-        return None
+    except Exception as e: st.error(f"Erro na análise principal da IA: {e}"); return None
 
 # --- FUNÇÕES DE ANÁLISE CONTEXTUAL ---
 @st.cache_data
 def generate_sentiment_analysis_text(_sentiment_data):
-    prompt = f"""
-    Aja como um analista de dados sênior. Com base na seguinte distribuição de sentimentos: {json.dumps(_sentiment_data, indent=2)}.
-    Escreva uma análise profissional de 1 a 2 parágrafos.
-    - O que essa distribuição geral (positiva, negativa, neutra) sugere sobre a recepção do público?
-    - Existem implicações de negócio ou de marca diretas a partir desses números?
-    - Qual o tom geral da conversa?
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception:
-        return "Não foi possível gerar a análise textual para o gráfico de sentimento."
+    prompt = f"""Aja como um analista de dados sênior. Com base na seguinte distribuição de sentimentos: {json.dumps(_sentiment_data)}. Escreva uma análise profissional de 1 a 2 parágrafos sobre o que essa distribuição sugere sobre a recepção do público, as implicações de negócio e o tom geral da conversa."""
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception: return "Não foi possível gerar a análise textual para o gráfico de sentimento."
 
 @st.cache_data
 def generate_topics_analysis_text(_topics_data):
-    prompt = f"""
-    Aja como um estrategista de conteúdo e produto experiente. Analise os seguintes temas e seus respectivos sentimentos: {json.dumps(_topics_data, indent=2, ensure_ascii=False)}.
-    Para cada tema principal, forneça uma breve discussão sobre o que ele representa e tente inferir exemplos de comentários de usuários que expressariam esses sentimentos.
-    Por exemplo, para um tema 'Preço' com sentimento negativo, um exemplo inferido seria: 'Achei o preço muito alto em comparação com os concorrentes'.
-    Mantenha a análise concisa e profissional, com foco nas implicações para o negócio.
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception:
-        return "Não foi possível gerar a análise textual para o gráfico de temas."
+    prompt = f"""Aja como um Analista de Mercado e Estrategista de Negócios Sênior. Sua tarefa é transformar os dados brutos de temas e sentimentos em um memorando estratégico coeso e acionável para as equipes de marketing e produto. Dados: {json.dumps(_topics_data, indent=2, ensure_ascii=False)}. Escreva um texto corrido e natural, sem quebras por tópicos ou bullet points. A análise deve fluir como um relatório coeso, abordando: 1. Síntese Estratégica: A história central que os temas contam. 2. Análise dos Pontos Fortes: Temas positivos e como o marketing pode alavancá-los. 3. Análise dos Desafios e Oportunidades: Temas negativos/neutros e o que revelam para o produto. 4. Recomendação Final: Onde focar a atenção estratégica no curto prazo. O objetivo é que este texto seja 'pronto para enviar' para um gestor de produto ou marketing."""
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception: return "Não foi possível gerar a análise textual para o gráfico de temas."
 
 @st.cache_data
 def generate_wordcloud_analysis_text(_term_clusters_data):
-    prompt = f"""
-    Aja como um pesquisador de mercado. Os seguintes termos foram os mais frequentes nos comentários: {json.dumps(list(_term_clusters_data.keys()), indent=2, ensure_ascii=False)}.
-    Escreva uma análise profissional de 1 a 2 parágrafos.
-    - Que história esses termos contam quando vistos em conjunto?
-    - A proeminência de certas palavras sugere o que é mais importante para este público?
-    - Existem jargões ou gírias que indicam um perfil de público específico?
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception:
-        return "Não foi possível gerar a análise textual para a nuvem de palavras."
+    prompt = f"""Aja como um pesquisador de mercado. Os seguintes termos foram os mais frequentes nos comentários: {json.dumps(list(_term_clusters_data.keys()))}. Escreva uma análise profissional de 1 a 2 parágrafos sobre a história que esses termos contam, o que é "top of mind" para o público e o que o vocabulário revela sobre seu perfil."""
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception: return "Não foi possível gerar a análise textual para a nuvem de palavras."
 
 @st.cache_data
 def generate_relations_analysis_text(_relations_data):
-    prompt = f"""
-    Aja como um analista de sistemas de negócio. As seguintes relações entre temas foram identificadas: {json.dumps(_relations_data, indent=2, ensure_ascii=False)}.
-    Escreva uma análise profissional de 1 a 2 parágrafos.
-    - O que as conexões entre os temas revelam?
-    - Essas relações indicam uma jornada do usuário ou um processo de tomada de decisão?
-    - Quais são as implicações estratégicas dessas conexões?
-    """
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception:
-        return "Não foi possível gerar a análise textual para o grafo de relações."
+    prompt = f"""Aja como um analista de sistemas de negócio. As seguintes relações entre temas foram identificadas: {json.dumps(_relations_data)}. Escreva uma análise profissional de 1 a 2 parágrafos sobre o que as conexões entre os temas revelam sobre a jornada do usuário e quais as implicações estratégicas disso."""
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception: return "Não foi possível gerar a análise textual para o grafo de relações."
 
 @st.cache_data
 def generate_qualitative_analysis(_analysis_results, _text_sample):
     prompt = f"""Como especialista em Marketing, redija uma análise qualitativa (3-4 parágrafos) com base nos dados. Foco em insights, temas e oportunidades. Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
-    try:
-        response = model.generate_content(prompt); return response.text.strip()
+    try: response = model.generate_content(prompt); return response.text.strip()
     except Exception as e: return f"Erro: {e}"
 
-# --- PROMPT RESTAURADO E MELHORADO PARA A PERSONA SINTÉTICA ---
 @st.cache_data
 def generate_persona_insights(_analysis_results, _text_sample):
+    prompt = f"""Aja como um Estrategista de Marketing e Produto. Baseado nos dados, crie um perfil detalhado de uma "persona sintética". Estruture em Markdown: 1. Nome da Persona (sugestivo). 2. Perfil Resumido (2-3 frases). 3. Dores e Necessidades Principais (bullet points). 4. Desejos e Motivações (bullet points). 5. Tom de Voz e Comportamento. 6. Oportunidades de Engajamento (2-3 ações concretas). Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
+    try: response = model.generate_content(prompt); return response.text.strip()
+    except Exception as e: return f"Erro ao gerar insights de persona: {e}"
+
+@st.cache_data
+def generate_ice_score_tests(_analysis_results):
+    prompt = f"""Como Growth Hacker, sugira 10 testes (ICE Score), ordenados. Resposta DEVE ser um único JSON. Inclua: Ordem, Nome, Descrição, Variável, Impacto (1-10), Confiança (1-10), Facilidade (1-10), ICE Score. Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
+    try: response = model.generate_content(prompt); return json.loads(clean_json_response(response.text))
+    except Exception as e: st.error(f"Erro ao gerar testes ICE: {e}"); return None
+
+# --- PROMPT REFORMULADO PARA PMM: MENOS É MAIS ---
+@st.cache_data
+def generate_product_marketing_insights(_analysis_results):
     prompt = f"""
-    Aja como um Estrategista de Marketing e Produto experiente. Com base nos dados de social listening, crie um perfil detalhado de uma "persona sintética" que represente o público analisado.
+    Aja como um Consultor de Estratégia de Produto e Marketing de alto nível. Sua tarefa é destilar os dados de social listening em um briefing executivo, conciso e extremamente acionável. A filosofia é 'menos é mais'. Evite repetições de outras seções e foque nas conclusões estratégicas.
 
     **Dados da Análise:**
     {json.dumps(_analysis_results, ensure_ascii=False)}
 
-    **Sua resposta deve ser bem estruturada em Markdown, seguindo estes tópicos:**
+    **Estruture sua resposta em Markdown, usando exatamente estes três tópicos:**
 
-    ### Perfil da Persona Sintética
+    ### Briefing Estratégico para Produto e Marketing
 
-    **1. Nome da Persona:**
-    * Crie um nome sugestivo e memorável que capture a essência do público (ex: "O Analista Custo-Benefício", "A Empreendedora Conectada", "O Crítico Construtivo").
+    **1. Diagnóstico Central:**
+    * Em um único parágrafo, qual é a principal tensão ou oportunidade revelada pelos dados? Qual é o 'resumo da ópera' da percepção do público sobre este assunto/produto?
 
-    **2. Perfil Resumido (2-3 frases):**
-    * Descreva em poucas palavras quem é essa persona, qual seu principal objetivo e sua atitude geral.
+    **2. Diretrizes Estratégicas para MARKETING:**
+    * Com base no diagnóstico, liste de 2 a 3 recomendações de alto impacto para a equipe de marketing. Seja prescritivo.
+      * **Exemplo:** "Focar a mensagem principal no benefício X, que é o ponto positivo mais ressonante."
+      * **Exemplo:** "Criar uma campanha de conteúdo para desmistificar a objeção Y, o principal ponto de atrito."
 
-    **3. Dores e Necessidades Principais:**
-    * Com base nos temas negativos e neutros, liste em tópicos (bullet points) as principais frustrações, problemas e necessidades não atendidas desta persona. O que a impede de atingir seus objetivos?
+    **3. Diretrizes Estratégicas para PRODUTO:**
+    * Com base no diagnóstico, liste de 2 a 3 recomendações de alto impacto para a equipe de produto. Seja prescritivo.
+      * **Exemplo:** "Priorizar a correção do problema X no próximo sprint, pois é a maior fonte de sentimento negativo."
+      * **Exemplo:** "Investigar a viabilidade da funcionalidade Y, o desejo mais recorrente do público."
 
-    **4. Desejos e Motivações:**
-    * Com base nos temas positivos e termos-chave, liste em tópicos os principais desejos e o que realmente motiva essa persona. O que ela espera alcançar? Qual é o "ganho" que ela procura?
-
-    **5. Tom de Voz e Comportamento:**
-    * Como essa persona se comunica? Ela é formal, informal, técnica, cética, entusiasmada?
-    * Qual seu comportamento mais provável (ex: pesquisa muito antes de comprar, é leal a marcas, valoriza o suporte rápido)?
-
-    **6. Oportunidades de Engajamento:**
-    * Com base em tudo acima, sugira 2-3 estratégias ou ações concretas para engajar essa persona de forma eficaz. (ex: "Criar tutoriais em vídeo focados no tema X", "Oferecer um teste gratuito para mitigar a objeção Y", "Usar uma linguagem mais direta e menos técnica em nossos anúncios").
+    O objetivo é criar um documento que um C-level ou líder de equipe possa ler em 60 segundos e entender exatamente onde focar os esforços.
     """
     try:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        return f"Erro ao gerar insights de persona: {e}"
+        return f"Erro ao gerar insights de PMM: {e}"
 
-
-@st.cache_data
-def generate_ice_score_tests(_analysis_results):
-    prompt = f"""Como Growth Hacker, sugira 10 testes (ICE Score), ordenados. Resposta DEVE ser um único JSON. Inclua: Ordem, Nome, Descrição, Variável, Impacto (1-10), Confiança (1-10), Facilidade (1-10), ICE Score. Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
-    try:
-        response = model.generate_content(prompt); return json.loads(clean_json_response(response.text))
-    except Exception as e: st.error(f"Erro ao gerar testes ICE: {e}"); return None
-
-@st.cache_data
-def generate_product_marketing_insights(_analysis_results):
-    prompt = f"""Como PMM Sênior, analise os dados e crie um briefing de Product Marketing. Estruture em Markdown com: Resumo Executivo, Perfil do Público, Percepções Atuais, Desejos e Necessidades, Objeções e Barreiras, Recomendações Estratégicas (Posicionamento e Roadmap). Dados: {json.dumps(_analysis_results, ensure_ascii=False)}"""
-    try:
-        response = model.generate_content(prompt); return response.text.strip()
-    except Exception as e: return f"Erro ao gerar insights de PMM: {e}"
 
 # --- FUNÇÕES DE VISUALIZAÇÃO ---
 def plot_sentiment_chart(sentiment_data):
-    # Usando verde para positivo, amarelo para negativo
     colors_for_pie = {'positive': '#4CAF50', 'neutral': '#cccccc', 'negative': '#ffcd03', 'no_sentiment_detected': '#f0f0f0'}
     labels_order = ['positive', 'neutral', 'negative', 'no_sentiment_detected']
     display_labels = ['Positivo', 'Neutro', 'Negativo', 'Não Detectado']
@@ -226,8 +167,7 @@ def plot_sentiment_chart(sentiment_data):
     filtered_labels, filtered_sizes, filtered_colors = zip(*filtered_data)
     fig, ax = plt.subplots(figsize=(6, 6))
     wedges, texts, autotexts = ax.pie(filtered_sizes, explode=[0.03]*len(filtered_labels), labels=filtered_labels, colors=filtered_colors, autopct='%1.1f%%', startangle=90, pctdistance=0.85)
-    for autotext in autotexts:
-        autotext.set_color('black'); autotext.set_fontweight('bold')
+    for autotext in autotexts: autotext.set_color('black'); autotext.set_fontweight('bold')
     ax.add_artist(plt.Circle((0,0),0.70,fc='white'))
     ax.axis('equal'); ax.set_title('1. Análise de Sentimento Geral', pad=18, color='#1f2329')
     st.pyplot(fig)
@@ -238,8 +178,8 @@ def plot_topics_chart(topics_data):
     df_topics['Total'] = df_topics['positive'] + df_topics['neutral'] + df_topics['negative']
     df_topics = df_topics.sort_values('Total', ascending=True)
     fig, ax = plt.subplots(figsize=(8, max(4, len(df_topics) * 0.5)))
-    # ALTERAÇÃO DE COR: Verde (Positivo), Amarelo (Neutro), Preto (Negativo)
     df_topics[['positive', 'neutral', 'negative']].plot(kind='barh', stacked=True, color=['#4CAF50', '#ffcd03', '#000000'], ax=ax)
+    ax.set_yticklabels(df_topics['name'])
     ax.set_title('2. Temas Mais Citados por Sentimento'); ax.set_xlabel('Número de Comentários'); ax.set_ylabel('Tema')
     ax.legend(['Positivo', 'Neutro', 'Negativo'], loc='lower right', frameon=False)
     plt.tight_layout(); st.pyplot(fig)
@@ -291,8 +231,7 @@ elif st.session_state.last_input_type == 'youtube':
     youtube_urls = [url.strip() for url in [youtube_url_1, youtube_url_2, youtube_url_3] if url.strip()]
     if youtube_urls:
         temp_comments = []
-        for url in youtube_urls:
-            temp_comments.extend(download_youtube_comments(url))
+        for url in youtube_urls: temp_comments.extend(download_youtube_comments(url))
         all_comments_list = temp_comments
 elif st.session_state.last_input_type == 'manual' and manual_text:
     all_comments_list = [line for line in manual_text.split("\n") if line.strip()]
@@ -316,7 +255,7 @@ if all_comments_list:
         with tabs[1]:
             st.subheader("Gráfico de Temas por Sentimento")
             plot_topics_chart(analysis_results.get('topics', []))
-            st.subheader("Análise dos Insights do Gráfico")
+            st.subheader("Análise Estratégica dos Temas")
             with st.spinner("Gerando análise..."):
                 st.markdown(generate_topics_analysis_text(analysis_results.get('topics', [])))
         with tabs[2]:
@@ -343,13 +282,10 @@ if all_comments_list:
             st.subheader("Sugestões de Testes de Growth (ICE Score)")
             with st.spinner("Gerando testes..."):
                 ice = generate_ice_score_tests(analysis_results)
-                if ice:
-                    df_ice = pd.DataFrame(ice)
-                    st.dataframe(df_ice, hide_index=True, use_container_width=True)
-                else:
-                    st.warning("Não foi possível gerar os testes de Growth.")
+                if ice: st.dataframe(pd.DataFrame(ice), hide_index=True, use_container_width=True)
+                else: st.warning("Não foi possível gerar os testes de Growth.")
         with tabs[7]:
-            st.subheader("Briefing Estratégico de Product Marketing")
+            st.subheader("Briefing Estratégico para Produto e Marketing")
             with st.spinner("Gerando briefing..."):
                 st.markdown(generate_product_marketing_insights(analysis_results))
     else:
